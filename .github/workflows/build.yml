@@ -1,0 +1,49 @@
+name: Build executables
+
+on:
+  push:
+    tags:
+      - 'v*'          # create a tag like v1.0.0 to trigger a release build
+  workflow_dispatch:   # allow manual runs from the Actions tab
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      APP_NAME: ACGPhotoGet
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv & project deps
+        run: |
+          python -m pip install -U pip uv
+          uv pip install -r requirements.txt
+          uv pip install pyinstaller
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            uv pip install py2app
+          fi
+
+      - name: Build executable (Windows/Linux)
+        if: runner.os != 'macOS'
+        run: |
+          python build_exe.py --gui
+
+      - name: Build .app bundle (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # py2app will generate a .app bundle inside ./dist
+          python build_exe.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ env.APP_NAME }}
+          path: dist/*
