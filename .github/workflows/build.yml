@@ -3,30 +3,39 @@ name: Build executables
 on:
   push:
     tags:
-      - 'v*'          # create a tag like v1.0.0 to trigger a release build
-  workflow_dispatch:   # allow manual runs from the Actions tab
+      - 'v*'          # 推送 v 开头的标签时触发（如 v1.0.0）
+  workflow_dispatch:   # 允许从 Actions 页面手动触发
+
+permissions:
+  contents: write      # 允许创建 Release 和上传文件
 
 jobs:
   build:
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
+    
     runs-on: ${{ matrix.os }}
     env:
       APP_NAME: ACGPhotoGet
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install uv & project deps
+      - name: Install uv and project dependencies
         run: |
           python -m pip install -U pip uv
-          uv pip install -r requirements.txt
+          # 从 pyproject.toml 安装项目依赖 (pillow, requests)
+          uv pip install .
+          # 安装打包工具
           uv pip install pyinstaller
+          # macOS 额外安装 py2app
           if [[ "$RUNNER_OS" == "macOS" ]]; then
             uv pip install py2app
           fi
@@ -35,15 +44,70 @@ jobs:
         if: runner.os != 'macOS'
         run: |
           python build_exe.py --gui
+          # 重命名输出文件以便识别平台
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            mv dist/${{ env.APP_NAME }}.exe dist/${{ env.APP_NAME }}-windows.exe 2>/dev/null || true
+          else
+            mv dist/${{ env.APP_NAME }} dist/${{ env.APP_NAME }}-linux 2>/dev/null || true
+          fi
 
       - name: Build .app bundle (macOS)
         if: runner.os == 'macOS'
         run: |
-          # py2app will generate a .app bundle inside ./dist
           python build_exe.py
+          # 压缩 .app 为 zip 方便下载
+          cd dist
+          zip -r ${{ env.APP_NAME }}-macos.zip ${{ env.APP_NAME }}.app
+          cd ..
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-${{ env.APP_NAME }}
+          name: ${{ matrix.os }}-build
           path: dist/*
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List built files
+        run: ls -la dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## ACG Photo Get ${{ github.ref_name }}
+            
+            ### 📦 下载
+            根据您的操作系统下载对应的版本：
+            - **Windows**: `ACGPhotoGet-windows.exe`
+            - **macOS**: `ACGPhotoGet-macos.zip` (解压后双击 .app 运行)
+            - **Linux**: `ACGPhotoGet-linux` (需要执行权限: `chmod +x ACGPhotoGet-linux`)
+            
+            ### ✨ 功能
+            - 二次元图片自动下载工具
+            - 支持 NekosAPI 和 Lolicon API
+            - 图形界面和命令行双模式
+            - 支持分辨率过滤、并发下载
+            
+            ### 📝 说明
+            - Windows/Linux 版本是单一可执行文件，直接双击运行
+            - macOS 版本是 .app 包，解压后双击运行
+          files: |
+            dist/ACGPhotoGet-windows.exe
+            dist/ACGPhotoGet-macos.zip
+            dist/ACGPhotoGet-linux
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
