@@ -32,12 +32,12 @@ jobs:
         run: |
           python -m pip install -U pip uv
           # 从 pyproject.toml 安装项目依赖 (pillow, requests)
-          uv pip install .
+          uv sync
           # 安装打包工具
-          uv pip install pyinstaller
+          uv add pyinstaller
           # macOS 额外安装 py2app
           if [[ "$RUNNER_OS" == "macOS" ]]; then
-            uv pip install py2app
+            uv add py2app
           fi
 
       - name: Build executable (Windows/Linux)
