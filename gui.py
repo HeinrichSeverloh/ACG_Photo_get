@@ -69,6 +69,13 @@ class App(tk.Tk):
         self.filter_var = tk.BooleanVar(value=main.CONFIG.get('FILTER_RESOLUTION', False))
         ttk.Checkbutton(frm, text='分辨率过滤', variable=self.filter_var).grid(row=0, column=5, padx=5)
 
+        # API 源选择
+        ttk.Label(frm, text='API 源:').grid(row=0, column=6, sticky='e')
+        self.api_var = tk.StringVar(value=main.CONFIG.get('API_SOURCE', 'nekos'))
+        api_combo = ttk.Combobox(frm, textvariable=self.api_var, values=['nekos', 'lolicon'], state='readonly', width=10)
+        api_combo.grid(row=0, column=7, sticky='w')
+        api_combo.current(0 if self.api_var.get() == 'nekos' else 1)
+
         # 下载路径选择
         ttk.Label(frm, text='保存路径:').grid(row=1, column=0, sticky='e')
         self.save_path_var = tk.StringVar(value=main.CONFIG.get('SAVE_DIR', ''))
@@ -125,6 +132,7 @@ class App(tk.Tk):
         main.CONFIG['MIN_WIDTH'] = self.min_w_var.get()
         main.CONFIG['MIN_HEIGHT'] = self.min_h_var.get()
         main.CONFIG['SAVE_DIR'] = self.save_path_var.get()
+        main.CONFIG['API_SOURCE'] = self.api_var.get()
 
     def start_download_thread(self):
         # 防止重复点击

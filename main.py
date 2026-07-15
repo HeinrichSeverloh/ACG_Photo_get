@@ -23,7 +23,7 @@ CONFIG = {
     "MAX_WORKERS": 5,                                         # 并发下载线程数
     "R18": False,                                             # True → explicit, False → safe
     "API_SOURCE": "nekos",                                      # "nekos" or "lolicon"
-    "API_ENDPOINT": {"nekos": "https://api.nekosapi.com/v4/images", "lolicon": "https://api.lolicon.app/setu/v2"},
+    "API_ENDPOINT": {"nekos": "https://ap i.nekosapi.com/v4/images", "lolicon": "https://api.lolicon.app/setu/v2"},
     "REQUEST_DELAY": 0.5,                                     # 每批请求间隔（秒）
     "MAX_LOOP": 50,                                           # 最大尝试轮次
     "FILTER_RESOLUTION": False,                               # 是否开启分辨率过滤
