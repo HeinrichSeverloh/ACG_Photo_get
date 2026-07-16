@@ -1,57 +1,81 @@
-name: Build Executables
+name: Build AppImage for ACG_Photo_get
 
+# 触发条件：当推送到 main 分支，或推送以 'v' 开头的标签时触发
 on:
   push:
+    branches: [ main ]
     tags:
       - 'v*'
-  workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  build-appimage:
+    name: Build on Linux (AppImage)
+    # 使用较旧的 Ubuntu 20.04 以兼容更广泛的 Linux 发行版[reference:2]
+    runs-on: ubuntu-20.04
 
     steps:
-      - uses: actions/checkout@v4
+      # 1. 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      # 2. 设置 Python 环境 (项目要求 Python >= 3.10)[reference:3]
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.10'
 
+      # 3. (重要) 使用官方 venv 创建虚拟环境
+      - name: Create and activate virtual environment
+        run: |
+          python -m venv venv
+          echo "$(pwd)/venv/bin" >> $GITHUB_PATH
+
+      # 4. 在虚拟环境中安装项目依赖[reference:4]
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install --upgrade pip
+          pip install requests pillow
+          # 安装 PyInstaller 用于打包
           pip install pyinstaller
 
-      # 直接调用 PyInstaller，不依赖 build_exe.py，避免脚本潜在问题
-      # 排除五个大模块，防止内存溢出（这是之前失败的根本原因）
-      # 不指定 --windowed，让程序带控制台（所有平台通用，无兼容风险）
-      - name: Build executable
+      # 5. 使用 PyInstaller 将项目打包成单个可执行文件
+      - name: Build executable with PyInstaller
         run: |
-          pyinstaller --onefile \
-                      --exclude-module setuptools \
-                      --exclude-module pip \
-                      --exclude-module distutils \
-                      --exclude-module unittest \
-                      --exclude-module test \
-                      --name ACGPhotoGet \
-                      gui.py
+          # 假设你的主脚本是项目根目录下的某个 .py 文件
+          # 请将 'main.py' 替换为你实际的主入口文件名
+          # 这里使用 --onefile 打包成单个文件，方便后续制作 AppImage
+          pyinstaller --onefile --hidden-import tkinter --name ACGPhotoGet gui.py
 
-      - name: Upload Artifact
+      # 6. 准备 AppImage 打包所需的 AppDir 目录结构
+      - name: Prepare AppDir structure
+        run: |
+          mkdir -p AppDir/usr/bin
+          # 将 PyInstaller 生成的可执行文件复制到 AppDir 中
+          cp dist/ACG_Photo_get AppDir/usr/bin/
+          # 创建 AppRun 文件，这是 AppImage 的入口
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin/:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib/:${LD_LIBRARY_PATH}"
+          exec "${HERE}/usr/bin/ACG_Photo_get" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+      # 7. 下载 appimagetool 并打包成 .AppImage
+      - name: Build AppImage using appimagetool
+        run: |
+          # 下载 appimagetool
+          wget -c "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
+          chmod +x appimagetool
+          # 使用 appimagetool 将 AppDir 目录打包成 AppImage
+          ./appimagetool AppDir
+
+      # 8. 上传最终的 .AppImage 文件作为构建产物
+      - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ACG_Photo_Get-${{ matrix.os }}
-          path: dist/
-
-      - name: Create Release and Upload Assets
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/**
+          name: ACG_Photo_get-Linux-AppImage
+          # 查找并上传生成的 .AppImage 文件
+          path: ./*.AppImage
