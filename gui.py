@@ -1,4 +1,4 @@
-"""简易 Tkinter GUI for ACG_Photo_get
+"""简易 PyQt6 GUI for ACG_Photo_get
 
 功能概览
 - 直接在窗口中配置脚本的主要参数（目标数量、并发、标签、R18、分辨率过滤等）
@@ -11,149 +11,198 @@ python gui.py
 ```
 """
 
-import threading
-import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox, filedialog
-import json
 import sys
-import logging
-
-# 把项目根目录加入路径（如果直接以模块方式运行）
 import os
+import logging
+from pathlib import Path
+
+# Ensure the project root is in sys.path when running this file directly
 sys.path.append(os.path.abspath('.'))
 
-import main  # 主脚本，已经实现了所有业务逻辑和配置对象
+import main
 
-# ---------- 自定义日志处理器，将日志写入 Text widget ----------
-class TextHandler(logging.Handler):
-    def __init__(self, text_widget):
-        super().__init__()
-        self.text_widget = text_widget
-        self.text_widget.configure(state='disabled')
+from PyQt6 import QtCore, QtWidgets
+from PyQt6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QLabel,
+    QLineEdit,
+    QSpinBox,
+    QCheckBox,
+    QComboBox,
+    QPushButton,
+    QTextEdit,
+    QFileDialog,
+    QMessageBox,
+    QGridLayout,
+    QHBoxLayout,
+    QVBoxLayout,
+)
+
+class QtLogHandler(QtCore.QObject, logging.Handler):
+    """Logging handler that emits log records to a QTextEdit via a Qt signal.
+    Uses Qt's thread‑safe signal/slot mechanism so logs from background threads
+    appear correctly in the GUI.
+    """
+    log_signal = QtCore.pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        QtCore.QObject.__init__(self, parent)
+        logging.Handler.__init__(self)
+        self.log_signal.connect(parent.append_log)
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        self.setFormatter(formatter)
 
     def emit(self, record):
         msg = self.format(record)
-        self.text_widget.configure(state='normal')
-        self.text_widget.insert(tk.END, msg + '\n')
-        self.text_widget.see(tk.END)
-        self.text_widget.configure(state='disabled')
+        self.log_signal.emit(msg)
 
-# ---------- GUI 主体 ----------
-class App(tk.Tk):
+class Worker(QtCore.QThread):
+    """Runs ``main.main`` in a separate thread and emits a finished signal.
+    The ``result`` attribute holds the exit code returned by ``main.main``.
+    """
+    finished = QtCore.pyqtSignal(int)
+
+    def run(self):
+        try:
+            result = main.main()
+        except Exception:
+            logging.exception('Exception in worker thread')
+            result = 1
+        self.finished.emit(result)
+
+class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.title('ACG Photo Downloader')
-        self.geometry('720x560')
-        self.create_widgets()
-        self.configure_logging()
+        self.setWindowTitle('ACG Photo Downloader')
+        self.resize(720, 560)
+        central = QWidget()
+        self.setCentralWidget(central)
 
-    def create_widgets(self):
-        frm = ttk.Frame(self)
-        frm.pack(fill='x', padx=10, pady=5)
+        # ---------- Layout ----------
+        main_layout = QVBoxLayout(central)
+        grid = QGridLayout()
+        main_layout.addLayout(grid)
 
-        # 目标数量
-        ttk.Label(frm, text='目标数量:').grid(row=0, column=0, sticky='e')
-        self.target_var = tk.IntVar(value=main.CONFIG.get('TARGET_COUNT', 30))
-        ttk.Entry(frm, textvariable=self.target_var, width=8).grid(row=0, column=1, sticky='w')
+        # Row 0: target count, workers, R18, filter, API source
+        grid.addWidget(QLabel('目标数量:'), 0, 0)
+        self.target_spin = QSpinBox()
+        self.target_spin.setRange(1, 10000)
+        self.target_spin.setValue(main.CONFIG.get('TARGET_COUNT', 30))
+        grid.addWidget(self.target_spin, 0, 1)
 
-        # 并发线程数
-        ttk.Label(frm, text='并发线程:').grid(row=0, column=2, sticky='e')
-        self.workers_var = tk.IntVar(value=main.CONFIG.get('MAX_WORKERS', 5))
-        ttk.Entry(frm, textvariable=self.workers_var, width=5).grid(row=0, column=3, sticky='w')
+        grid.addWidget(QLabel('并发线程:'), 0, 2)
+        self.workers_spin = QSpinBox()
+        self.workers_spin.setRange(1, 64)
+        self.workers_spin.setValue(main.CONFIG.get('MAX_WORKERS', 5))
+        grid.addWidget(self.workers_spin, 0, 3)
 
-        # R18 开关
-        self.r18_var = tk.BooleanVar(value=main.CONFIG.get('R18', False))
-        ttk.Checkbutton(frm, text='R18 (explicit)', variable=self.r18_var).grid(row=0, column=4, padx=5)
+        self.r18_check = QCheckBox('R18 (explicit)')
+        self.r18_check.setChecked(main.CONFIG.get('R18', False))
+        grid.addWidget(self.r18_check, 0, 4)
 
-        # 分辨率过滤开关
-        self.filter_var = tk.BooleanVar(value=main.CONFIG.get('FILTER_RESOLUTION', False))
-        ttk.Checkbutton(frm, text='分辨率过滤', variable=self.filter_var).grid(row=0, column=5, padx=5)
+        self.filter_check = QCheckBox('分辨率过滤')
+        self.filter_check.setChecked(main.CONFIG.get('FILTER_RESOLUTION', False))
+        grid.addWidget(self.filter_check, 0, 5)
 
-        # API 源选择
-        ttk.Label(frm, text='API 源:').grid(row=0, column=6, sticky='e')
-        self.api_var = tk.StringVar(value=main.CONFIG.get('API_SOURCE', 'nekos'))
-        api_combo = ttk.Combobox(frm, textvariable=self.api_var, values=['nekos', 'lolicon'], state='readonly', width=10)
-        api_combo.grid(row=0, column=7, sticky='w')
-        api_combo.current(0 if self.api_var.get() == 'nekos' else 1)
+        grid.addWidget(QLabel('API 源:'), 0, 6)
+        self.api_combo = QComboBox()
+        self.api_combo.addItems(['nekos', 'lolicon'])
+        api_idx = 0 if main.CONFIG.get('API_SOURCE', 'nekos') == 'nekos' else 1
+        self.api_combo.setCurrentIndex(api_idx)
+        grid.addWidget(self.api_combo, 0, 7)
 
-        # 下载路径选择
-        ttk.Label(frm, text='保存路径:').grid(row=1, column=0, sticky='e')
-        self.save_path_var = tk.StringVar(value=main.CONFIG.get('SAVE_DIR', ''))
-        ttk.Entry(frm, textvariable=self.save_path_var, width=40, state='readonly').grid(row=1, column=1, columnspan=4, sticky='w')
-        ttk.Button(frm, text='浏览...', command=self.select_save_path).grid(row=1, column=5, sticky='w')
+        # Row 1: save path + browse button
+        grid.addWidget(QLabel('保存路径:'), 1, 0)
+        self.save_path_edit = QLineEdit(str(main.CONFIG.get('SAVE_DIR', '')))
+        self.save_path_edit.setReadOnly(True)
+        grid.addWidget(self.save_path_edit, 1, 1, 1, 4)
+        browse_btn = QPushButton('浏览...')
+        browse_btn.clicked.connect(self.select_save_path)
+        grid.addWidget(browse_btn, 1, 5)
 
-        # 分辨率阈值（当过滤开启时生效）
-        ttk.Label(frm, text='最小宽度:').grid(row=2, column=0, sticky='e')
-        self.min_w_var = tk.IntVar(value=main.CONFIG.get('MIN_WIDTH', 1920))
-        ttk.Entry(frm, textvariable=self.min_w_var, width=6).grid(row=2, column=1, sticky='w')
-        ttk.Label(frm, text='最小高度:').grid(row=2, column=2, sticky='e')
-        self.min_h_var = tk.IntVar(value=main.CONFIG.get('MIN_HEIGHT', 1080))
-        ttk.Entry(frm, textvariable=self.min_h_var, width=6).grid(row=2, column=3, sticky='w')
+        # Row 2: min width / min height
+        grid.addWidget(QLabel('最小宽度:'), 2, 0)
+        self.min_w_spin = QSpinBox()
+        self.min_w_spin.setRange(1, 10000)
+        self.min_w_spin.setValue(main.CONFIG.get('MIN_WIDTH', 1920))
+        grid.addWidget(self.min_w_spin, 2, 1)
+        grid.addWidget(QLabel('最小高度:'), 2, 2)
+        self.min_h_spin = QSpinBox()
+        self.min_h_spin.setRange(1, 10000)
+        self.min_h_spin.setValue(main.CONFIG.get('MIN_HEIGHT', 1080))
+        grid.addWidget(self.min_h_spin, 2, 3)
 
-        # 开始按钮
-        self.start_btn = ttk.Button(frm, text='开始下载', command=self.start_download_thread)
-        self.start_btn.grid(row=3, column=5, pady=5)
+        # Row 3: start button (right aligned)
+        self.start_btn = QPushButton('开始下载')
+        self.start_btn.clicked.connect(self.start_download)
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.start_btn)
+        main_layout.addLayout(btn_layout)
 
-        # 日志显示区
-        self.log_text = scrolledtext.ScrolledText(self, wrap='word', height=20)
-        self.log_text.pack(fill='both', expand=True, padx=10, pady=5)
+        # Log output area
+        self.log_edit = QTextEdit()
+        self.log_edit.setReadOnly(True)
+        main_layout.addWidget(self.log_edit, 1)
 
-    def select_save_path(self):
-        # 打开文件夹选择对话框，更新保存路径变量
-        selected = filedialog.askdirectory(initialdir=self.save_path_var.get() or os.getcwd())
-        if selected:
-            self.save_path_var.set(selected)
-        # Ensure the directory exists (create if needed)
-        try:
-            os.makedirs(self.save_path_var.get(), exist_ok=True)
-        except Exception as e:
-            logging.warning(f"创建保存目录失败: {e}")
-
-    def configure_logging(self):
-        # 把主脚本的 logging 处理器追加到 TextHandler
+        # Configure logging to send messages to the QTextEdit
         logger = logging.getLogger()
-        # 移除可能已经添加的 StreamHandler（避免重复打印到控制台）
         for h in list(logger.handlers):
             if isinstance(h, logging.StreamHandler):
                 logger.removeHandler(h)
-        # 添加自定义 TextHandler
-        text_handler = TextHandler(self.log_text)
-        fmt = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-        text_handler.setFormatter(fmt)
-        logger.addHandler(text_handler)
+        qt_handler = QtLogHandler(parent=self)
+        logger.addHandler(qt_handler)
         logger.setLevel(logging.INFO)
 
+        self.worker = None
+
+    def append_log(self, msg: str):
+        """Slot invoked from QtLogHandler to append a line to the log widget."""
+        self.log_edit.append(msg)
+        self.log_edit.verticalScrollBar().setValue(self.log_edit.verticalScrollBar().maximum())
+
+    def select_save_path(self):
+        directory = QFileDialog.getExistingDirectory(self, '选择保存目录', self.save_path_edit.text() or str(Path.home()))
+        if directory:
+            self.save_path_edit.setText(directory)
+            try:
+                os.makedirs(directory, exist_ok=True)
+            except Exception as e:
+                logging.warning(f'创建保存目录失败: {e}')
+
     def apply_gui_config(self):
-        # 将 GUI 中的值写回 main.CONFIG
-        main.CONFIG['TARGET_COUNT'] = self.target_var.get()
-        main.CONFIG['MAX_WORKERS'] = self.workers_var.get()
-        main.CONFIG['R18'] = self.r18_var.get()
-        main.CONFIG['FILTER_RESOLUTION'] = self.filter_var.get()
-        main.CONFIG['MIN_WIDTH'] = self.min_w_var.get()
-        main.CONFIG['MIN_HEIGHT'] = self.min_h_var.get()
-        main.CONFIG['SAVE_DIR'] = self.save_path_var.get()
-        main.CONFIG['API_SOURCE'] = self.api_var.get()
+        main.CONFIG['TARGET_COUNT'] = self.target_spin.value()
+        main.CONFIG['MAX_WORKERS'] = self.workers_spin.value()
+        main.CONFIG['R18'] = self.r18_check.isChecked()
+        main.CONFIG['FILTER_RESOLUTION'] = self.filter_check.isChecked()
+        main.CONFIG['MIN_WIDTH'] = self.min_w_spin.value()
+        main.CONFIG['MIN_HEIGHT'] = self.min_h_spin.value()
+        main.CONFIG['SAVE_DIR'] = self.save_path_edit.text()
+        main.CONFIG['API_SOURCE'] = self.api_combo.currentText()
 
-    def start_download_thread(self):
-        # 防止重复点击
-        self.start_btn.config(state='disabled')
+    def start_download(self):
+        self.start_btn.setEnabled(False)
         self.apply_gui_config()
-        threading.Thread(target=self.run_main, daemon=True).start()
+        self.log_edit.clear()
+        self.worker = Worker()
+        self.worker.finished.connect(self.on_finished)
+        self.worker.start()
 
-    def run_main(self):
-        try:
-            # 主函数会返回退出码，0 为成功
-            exit_code = main.main()
-            if exit_code == 0:
-                messagebox.showinfo('完成', f'下载完成，成功数量: {main.CONFIG["TARGET_COUNT"]}')
-            else:
-                messagebox.showwarning('未完成', f'未达到目标，已下载 {main.CONFIG["TARGET_COUNT"]} 张')
-        except Exception as e:
-            logging.exception('运行主程序时出错')
-            messagebox.showerror('错误', str(e))
-        finally:
-            self.start_btn.config(state='normal')
+    def on_finished(self, exit_code: int):
+        if exit_code == 0:
+            QMessageBox.information(self, '完成', f'下载完成，成功数量: {main.CONFIG.get("TARGET_COUNT", 0)}')
+        else:
+            QMessageBox.warning(self, '未完成', f'未达到目标，已下载 {main.CONFIG.get("TARGET_COUNT", 0)} 张')
+        self.start_btn.setEnabled(True)
+        self.worker = None
+
+def main_gui():
+    app = QApplication(sys.argv)
+    win = MainWindow()
+    win.show()
+    sys.exit(app.exec())
 
 if __name__ == '__main__':
-    import logging
-    App().mainloop()
+    main_gui()
