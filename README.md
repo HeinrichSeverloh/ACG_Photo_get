@@ -43,10 +43,11 @@ ACG Photo Get 是一个专为二次元爱好者设计的图片自动化下载工
 ## 📦 环境要求
 
 - **Python**: `>= 3.10`
-- **操作系统**: Linux / macOS / Windows (推荐在 Linux 服务器上配合 Cron 运行)
+- **操作系统**: Linux / macOS / Windows (推荐在 Linux 服务器上配合 Cron 运行，软件包目前只有Windows)
 - **核心依赖**:
   - `requests >= 2.34.2`
   - `pillow >= 12.3.0`
+  - `pyqt6>=6.11.0`
 
 ---
 
@@ -56,3 +57,22 @@ ACG Photo Get 是一个专为二次元爱好者设计的图片自动化下载工
    ```bash
    git clone https://github.com/HeinrichSeverloh/ACG_Photo_get.git
    cd ACG_Photo_get
+
+2. ** 安装依赖**
+   本项目由uv管理使用pyproject.toml文件前请安装uv
+  macOS and Linux
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+  
+  wimdows
+
+   ```powershell
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex
+   ```bash
+   uv sync
+
+4. **运行脚本**
+   gui -> gui.py
+   cli -> main.py
+   
+   
