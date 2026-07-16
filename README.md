@@ -65,7 +65,7 @@ ACG Photo Get 是一个专为二次元爱好者设计的图片自动化下载工
 
 4. **运行脚本**
 
-  gui -> gui.py
+   gui -> gui.py
 
    ```bash
    uv run gui.py
