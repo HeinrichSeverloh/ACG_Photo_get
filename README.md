@@ -1,4 +1,4 @@
-# 🌸 ACG Photo Get
+# 🌸 ACG Photo Get(软件包目前只有Windows)
 
 > 一个高效、可配置的二次元图片批量下载与自动化管理脚本。
 
