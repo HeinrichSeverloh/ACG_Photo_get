@@ -60,14 +60,6 @@ ACG Photo Get 是一个专为二次元爱好者设计的图片自动化下载工
 
 2. ** 安装依赖**
    本项目由uv管理使用pyproject.toml文件前请安装uv
-  macOS and Linux
-   ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-  
-  wimdows
-
-   ```powershell
-   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex
    ```bash
    uv sync
 
