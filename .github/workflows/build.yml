@@ -34,7 +34,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install requests pillow
+          pip install requests pillow pyqt6
           # 安装 PyInstaller 用于打包
           pip install pyinstaller
 
@@ -44,14 +44,14 @@ jobs:
           # 假设你的主脚本是项目根目录下的某个 .py 文件
           # 请将 'main.py' 替换为你实际的主入口文件名
           # 这里使用 --onefile 打包成单个文件，方便后续制作 AppImage
-          pyinstaller --onefile --hidden-import tkinter --name ACGPhotoGet gui.py
+          pyinstaller --onefile --name ACGPhotoGet gui.py
 
       # 6. 准备 AppImage 打包所需的 AppDir 目录结构
       - name: Prepare AppDir structure
         run: |
           mkdir -p AppDir/usr/bin
           # 将 PyInstaller 生成的可执行文件复制到 AppDir 中
-          cp dist/ACG_Photo_get AppDir/usr/bin/
+          cp dist/ACGPhotoGet AppDir/usr/bin/
           # 创建 AppRun 文件，这是 AppImage 的入口
           cat > AppDir/AppRun << 'EOF'
           #!/bin/bash
@@ -59,7 +59,7 @@ jobs:
           HERE=${SELF%/*}
           export PATH="${HERE}/usr/bin/:${PATH}"
           export LD_LIBRARY_PATH="${HERE}/usr/lib/:${LD_LIBRARY_PATH}"
-          exec "${HERE}/usr/bin/ACG_Photo_get" "$@"
+          exec "${HERE}/usr/bin/ACGPhotoGet" "$@"
           EOF
           chmod +x AppDir/AppRun
 

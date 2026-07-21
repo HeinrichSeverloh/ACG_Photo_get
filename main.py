@@ -23,7 +23,7 @@ CONFIG = {
     "MAX_WORKERS": 5,                                         # 并发下载线程数
     "R18": False,                                             # True → explicit, False → safe
     "API_SOURCE": "nekos",                                      # "nekos" or "lolicon"
-    "API_ENDPOINT": {"nekos": "https://ap i.nekosapi.com/v4/images", "lolicon": "https://api.lolicon.app/setu/v2"},
+    "API_ENDPOINT": {"nekos": "https://api.nekosapi.com/v4/images", "lolicon": "https://api.lolicon.app/setu/v2"},
     "REQUEST_DELAY": 0.5,                                     # 每批请求间隔（秒）
     "MAX_LOOP": 50,                                           # 最大尝试轮次
     "FILTER_RESOLUTION": False,                               # 是否开启分辨率过滤
@@ -42,7 +42,6 @@ def resolve_path(path: str) -> str:
 # Apply early resolution and ensure the directory exists.
 # If creation fails (e.g., due to permission issues), fall back to a user‑writable folder.
 resolved_dir = resolve_path(CONFIG["SAVE_DIR"])
-import logging
 try:
     os.makedirs(resolved_dir, exist_ok=True)
 except Exception as e:
@@ -247,10 +246,6 @@ def download_single_image(image_info):
         filename = f"{pid}_{safe_title}{ext}"
         base_path = os.path.join(CONFIG["SAVE_DIR"], filename)
 
-        # ---- 重名冲突处理 ----
-        if os.path.exists(base_path):
-            # 文件已存在，视为 duplicate
-            return "duplicate"
 
         # ---- 下载内容 ----
         # 使用 BytesIO 以便后续可能的分辨率检查
