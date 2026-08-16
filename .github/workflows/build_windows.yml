@@ -1,0 +1,26 @@
+name: Build AppImage for ACG_Photo_get
+
+# 触发条件：当推送到 main 分支，或推送以 'v' 开头的标签时触发
+on:
+  workflow_dispatch:
+
+jobs:
+  pyinstaller-build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+
+      - name: Build AppImage
+        run: |
+          pyinstaller --onefile -w --name=ACG_Photo_Get gui.py  # 替换为你的主脚本文件名
