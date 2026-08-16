@@ -2,8 +2,9 @@
 依赖： requests pillow
 """
 
-download_path = "/DATA/Photo/Static"
+download_path = "~/ACG_Photo_get"
 import os
+import logging
 import requests
 from io import BytesIO
 import time
@@ -52,7 +53,7 @@ except Exception as e:
 CONFIG["SAVE_DIR"] = resolved_dir
 
 # ---------- Logging Setup ----------
-import logging
+
 
 # Ensure log directory exists before configuring handlers (already ensured above)
 logging.basicConfig(
