@@ -19,13 +19,15 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install uv
+        run: pip install uv
+
       - name: Install dependencies
-        run: |
-          python -m pip install .
+        run: uv sync  
 
       - name: Build
         run: |
-          pyinstaller --onefile -w --name=CG_Photo_Get-linux-x86_64 gui.py
+          uv run pyinstaller --onefile -w --name=CG_Photo_Get-linux-x86_64 gui.py
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
