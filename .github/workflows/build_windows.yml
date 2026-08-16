@@ -1,4 +1,4 @@
-name: Build AppImage for ACG_Photo_get
+name: Build exe for ACG_Photo_get
 
 # 触发条件：当推送到 main 分支，或推送以 'v' 开头的标签时触发
 on:
@@ -21,6 +21,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller
 
-      - name: Build AppImage
+      - name: Build exe
         run: |
-          pyinstaller --onefile -w --name=ACG_Photo_Get gui.py  # 替换为你的主脚本文件名
+          pyinstaller --onefile -w --name=ACG_Photo_Get-windows-x86_64 gui.py  
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ACG_Photo_Get-windows-x86_64.exe
