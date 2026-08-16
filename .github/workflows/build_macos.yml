@@ -1,0 +1,36 @@
+name: Build macOS
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install uv
+      - run: uv sync
+      - run: uv pip install pyinstaller
+
+      - name: Build app
+        run: |
+          pyinstaller --onefile -w --name=ACG_Photo_Get-macos-x86_64 gui.py  
+
+
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
