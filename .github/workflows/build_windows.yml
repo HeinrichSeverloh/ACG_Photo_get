@@ -1,5 +1,8 @@
 name: Build exe for ACG_Photo_get
 
+permissions:
+  contents: write
+
 # 触发条件：当推送到 main 分支，或推送以 'v' 开头的标签时触发
 on:
   push:
