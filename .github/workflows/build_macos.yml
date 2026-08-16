@@ -25,7 +25,7 @@ jobs:
 
       - name: Build app
         run: |
-          pyinstaller --onefile -w --name=ACG_Photo_Get-macos-x86_64 gui.py  
+          uv run pyinstaller --onefile -w --name=ACG_Photo_Get-macos-x86_64 gui.py  
 
 
 
