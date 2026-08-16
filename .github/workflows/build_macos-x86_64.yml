@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-13
 
     steps:
       - uses: actions/checkout@v4
@@ -21,16 +21,21 @@ jobs:
 
       - run: pip install uv
       - run: uv sync
-      - run: uv add pyinstaller
+      - run: uv pip install pyinstaller
 
       - name: Build app
         run: |
-          uv run pyinstaller --onefile -w --name=ACG_Photo_Get-macos-x86_64 gui.py  
-
-
+          uv run pyinstaller --windowed \
+              --name ACG_Photo_Get \
+              gui.py  
+              
+      - name: Package
+        run: |
+          cd dist
+          zip -r ACG_Photo_Get-macos-x86_64.zip ACG_Photo_Get.app
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: dist/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
