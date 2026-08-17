@@ -27,7 +27,7 @@ jobs:
 
       - name: Build
         run: |
-          uv run pyinstaller --onefile -w --name=ACG_Photo_Get-linux-x86_64 gui.py
+          uv run pyinstaller --onefile -w --name=ACG_Photo_Get-linux-x86_64 gui_for_desktop.py
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

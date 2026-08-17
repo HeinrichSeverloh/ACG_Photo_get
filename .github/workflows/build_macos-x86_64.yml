@@ -27,7 +27,7 @@ jobs:
         run: |
           uv run pyinstaller --windowed \
               --name ACG_Photo_Get \
-              gui.py  
+              gui_for_desktop.py 
               
       - name: Package
         run: |

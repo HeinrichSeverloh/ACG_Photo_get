@@ -7,7 +7,7 @@
 
 使用方法
 ```bash
-python gui.py
+python gui_for_desktop.py
 ```
 """
 
