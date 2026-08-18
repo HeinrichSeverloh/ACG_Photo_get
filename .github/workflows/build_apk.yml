@@ -23,10 +23,11 @@ jobs:
 
       - name: Build APK
         run: |
-          flet build apk
+          # 添加 --yes 参数自动确认安装 Flutter SDK
+          flet build apk --yes
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: acg-photo-get-apk
-          path: dist/*.apk
+          path: build/app/outputs/flutter-apk/*.apk
