@@ -23,10 +23,10 @@ jobs:
 
       - name: Build APK
         run: |
-          flet build apk --app-name "ACG Photo Get" --package-name "com.acg.photodownloader" --app-version "1.0.0"
+          flet build apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: acg-photo-get-apk
-          path: build/app/outputs/flutter-apk/*.apk
+          path: dist/*.apk

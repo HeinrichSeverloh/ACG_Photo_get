@@ -1,0 +1,6 @@
+{
+  "app-name": "ACG Photo Get",
+  "package-name": "com.acg.photodownloader",
+  "version": "1.0.0",
+  "output-dir": "dist"
+}
