@@ -10,10 +10,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -26,7 +26,7 @@ jobs:
           flet pack gui_flet.py --app-name "ACG Photo Get" --package-name "com.acg.photodownloader" --app-version "1.0.0" --output-dir dist
 
       - name: Upload APK
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: acg-photo-get-apk
           path: dist/*.apk
