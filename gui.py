@@ -1,208 +1,174 @@
-"""简易 PyQt6 GUI for ACG_Photo_get
-
-功能概览
-- 直接在窗口中配置脚本的主要参数（目标数量、并发、标签、R18、分辨率过滤等）
-- 点击 *开始下载* 后在下方日志框实时显示 `logging` 输出
-- 下载过程在后台线程运行，避免阻塞 GUI
-
-使用方法
-```bash
-python gui_for_desktop.py
-```
-"""
-
-import sys
-import os
+"""Flet GUI for ACG_Photo_get (正式发布版 v1.0.0)."""
 import logging
-from pathlib import Path
-
-# Ensure the project root is in sys.path when running this file directly
-sys.path.append(os.path.abspath('.'))
-
+import threading
+import os
+import flet as ft
 import main
 
-from PyQt6 import QtCore, QtWidgets
-from PyQt6.QtWidgets import (
-    QApplication,
-    QMainWindow,
-    QWidget,
-    QLabel,
-    QLineEdit,
-    QSpinBox,
-    QCheckBox,
-    QComboBox,
-    QPushButton,
-    QTextEdit,
-    QFileDialog,
-    QMessageBox,
-    QGridLayout,
-    QHBoxLayout,
-    QVBoxLayout,
-)
+# 容错：如果 main.CONFIG 不存在
+if not hasattr(main, 'CONFIG'):
+    main.CONFIG = {
+        "SAVE_DIR": os.path.expanduser("~/ACG_Photo_get"),
+        "TARGET_COUNT": 30,
+        "MAX_WORKERS": 5,
+        "R18": False,
+        "API_SOURCE": "nekos",
+        "FILTER_RESOLUTION": False,
+        "MIN_WIDTH": 1920,
+        "MIN_HEIGHT": 1080,
+    }
 
-class QtLogHandler(QtCore.QObject, logging.Handler):
-    """Logging handler that emits log records to a QTextEdit via a Qt signal.
-    Uses Qt's thread‑safe signal/slot mechanism so logs from background threads
-    appear correctly in the GUI.
-    """
-    log_signal = QtCore.pyqtSignal(str)
+class FletLogHandler(logging.Handler):
+    def __init__(self, output: ft.Text):  # ✅ 修复：__init__
+        super().__init__()                # ✅ 修复：__init__
+        self.output = output
+        self.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
 
-    def __init__(self, parent=None):
-        QtCore.QObject.__init__(self, parent)
-        logging.Handler.__init__(self)
-        self.log_signal.connect(parent.append_log)
-        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-        self.setFormatter(formatter)
-
-    def emit(self, record):
-        msg = self.format(record)
-        self.log_signal.emit(msg)
-
-class Worker(QtCore.QThread):
-    """Runs ``main.main`` in a separate thread and emits a finished signal.
-    The ``result`` attribute holds the exit code returned by ``main.main``.
-    """
-    finished = QtCore.pyqtSignal(int)
-
-    def run(self):
+    def emit(self, record: logging.LogRecord):
         try:
-            result = main.main()
+            msg = self.format(record)
+            if self.output.value:
+                self.output.value += "\n" + msg
+            else:
+                self.output.value = msg
+            self.output.update()
         except Exception:
-            logging.exception('Exception in worker thread')
-            result = 1
-        self.finished.emit(result)
+            self.handleError(record)
 
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle('ACG Photo Downloader')
-        self.resize(720, 560)
-        central = QWidget()
-        self.setCentralWidget(central)
+def apply_gui_config(target_tf, workers_tf, r18_dropdown, filter_dropdown,
+                        api_dropdown, save_tf, min_w_tf, min_h_tf):
+    def _int(val, default):
+        try:
+            return int(val) if val else default
+        except Exception:
+            return default
 
-        # ---------- Layout ----------
-        main_layout = QVBoxLayout(central)
-        grid = QGridLayout()
-        main_layout.addLayout(grid)
+    # ✅ 修复：移除键名末尾的空格
+    main.CONFIG["TARGET_COUNT"] = _int(target_tf.value, 30)
+    main.CONFIG["MAX_WORKERS"] = _int(workers_tf.value, 5)
+    main.CONFIG["R18"] = str(r18_dropdown.value).lower() in ("true", "1", "yes")
+    main.CONFIG["FILTER_RESOLUTION"] = str(filter_dropdown.value).lower() in ("true", "1", "yes")
+    main.CONFIG["API_SOURCE"] = api_dropdown.value or "nekos"
+    main.CONFIG["SAVE_DIR"] = save_tf.value
+    main.CONFIG["MIN_WIDTH"] = _int(min_w_tf.value, 1920)
+    main.CONFIG["MIN_HEIGHT"] = _int(min_h_tf.value, 1080)
 
-        # Row 0: target count, workers, R18, filter, API source
-        grid.addWidget(QLabel('目标数量:'), 0, 0)
-        self.target_spin = QSpinBox()
-        self.target_spin.setRange(1, 10000)
-        self.target_spin.setValue(main.CONFIG.get('TARGET_COUNT', 30))
-        grid.addWidget(self.target_spin, 0, 1)
+def main_gui(page: ft.Page):
+    page.title = "ACG Photo GET"
+    page.window_width = 720
+    page.window_height = 560
 
-        grid.addWidget(QLabel('并发线程:'), 0, 2)
-        self.workers_spin = QSpinBox()
-        self.workers_spin.setRange(1, 64)
-        self.workers_spin.setValue(main.CONFIG.get('MAX_WORKERS', 5))
-        grid.addWidget(self.workers_spin, 0, 3)
+    target_tf = ft.TextField(label="目标数量", value=str(main.CONFIG.get("TARGET_COUNT", 30)), width=120)
+    workers_tf = ft.TextField(label="并发线程", value=str(main.CONFIG.get("MAX_WORKERS", 5)), width=120)
 
-        self.r18_check = QCheckBox('R18 (explicit)')
-        self.r18_check.setChecked(main.CONFIG.get('R18', False))
-        grid.addWidget(self.r18_check, 0, 4)
+    r18_dropdown = ft.Dropdown(
+        label="R18",
+        options=[ft.dropdown.Option("True"), ft.dropdown.Option("False")],
+        value=str(main.CONFIG.get("R18", False)),
+        width=120
+    )
 
-        self.filter_check = QCheckBox('分辨率过滤')
-        self.filter_check.setChecked(main.CONFIG.get('FILTER_RESOLUTION', False))
-        grid.addWidget(self.filter_check, 0, 5)
+    filter_dropdown = ft.Dropdown(
+        label="分辨率过滤",
+        options=[ft.dropdown.Option("True"), ft.dropdown.Option("False")],
+        value=str(main.CONFIG.get("FILTER_RESOLUTION", False)),
+        width=150
+    )
 
-        grid.addWidget(QLabel('API 源:'), 0, 6)
-        self.api_combo = QComboBox()
-        self.api_combo.addItems(['nekos', 'lolicon'])
-        api_idx = 0 if main.CONFIG.get('API_SOURCE', 'nekos') == 'nekos' else 1
-        self.api_combo.setCurrentIndex(api_idx)
-        grid.addWidget(self.api_combo, 0, 7)
+    api_dropdown = ft.Dropdown(
+        label="API 源",
+        options=[ft.dropdown.Option("nekos"), ft.dropdown.Option("lolicon")],
+        value=main.CONFIG.get("API_SOURCE", "nekos"),
+        width=150
+    )
 
-        # Row 1: save path + browse button
-        grid.addWidget(QLabel('保存路径:'), 1, 0)
-        self.save_path_edit = QLineEdit(str(main.CONFIG.get('SAVE_DIR', '')))
-        self.save_path_edit.setReadOnly(True)
-        grid.addWidget(self.save_path_edit, 1, 1, 1, 4)
-        browse_btn = QPushButton('浏览...')
-        browse_btn.clicked.connect(self.select_save_path)
-        grid.addWidget(browse_btn, 1, 5)
+    save_tf = ft.TextField(label="保存路径", value=str(main.CONFIG.get("SAVE_DIR", "")), width=300)
 
-        # Row 2: min width / min height
-        grid.addWidget(QLabel('最小宽度:'), 2, 0)
-        self.min_w_spin = QSpinBox()
-        self.min_w_spin.setRange(1, 10000)
-        self.min_w_spin.setValue(main.CONFIG.get('MIN_WIDTH', 1920))
-        grid.addWidget(self.min_w_spin, 2, 1)
-        grid.addWidget(QLabel('最小高度:'), 2, 2)
-        self.min_h_spin = QSpinBox()
-        self.min_h_spin.setRange(1, 10000)
-        self.min_h_spin.setValue(main.CONFIG.get('MIN_HEIGHT', 1080))
-        grid.addWidget(self.min_h_spin, 2, 3)
+    # ✅ 修复：文件夹选择
+    def _on_save_path(e):
+        if e.path:  # ✅ 使用 e.path（不是 e.files）
+            save_tf.value = e.path
+            save_tf.update()
 
-        # Row 3: start button (right aligned)
-        self.start_btn = QPushButton('开始下载')
-        self.start_btn.clicked.connect(self.start_download)
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.start_btn)
-        main_layout.addLayout(btn_layout)
+    file_picker = ft.FilePicker()
+    file_picker.on_result = _on_save_path
+    page.overlay.append(file_picker)
 
-        # Log output area
-        self.log_edit = QTextEdit()
-        self.log_edit.setReadOnly(True)
-        main_layout.addWidget(self.log_edit, 1)
+    # ✅ 修复：ft.Icons.FOLDER（大写 I）和 get_directory_path
+    folder_btn = ft.IconButton(
+        icon=ft.Icons.FOLDER,
+        tooltip="选择保存文件夹",
+        on_click=lambda e: file_picker.get_directory_path()  # ✅ 选择文件夹
+    )
 
-        # Configure logging to send messages to the QTextEdit
-        logger = logging.getLogger()
-        for h in list(logger.handlers):
-            if isinstance(h, logging.StreamHandler):
-                logger.removeHandler(h)
-        qt_handler = QtLogHandler(parent=self)
-        logger.addHandler(qt_handler)
-        logger.setLevel(logging.INFO)
+    min_w_tf = ft.TextField(label="最小宽度", value=str(main.CONFIG.get("MIN_WIDTH", 1920)), width=120)
+    min_h_tf = ft.TextField(label="最小高度", value=str(main.CONFIG.get("MIN_HEIGHT", 1080)), width=120)
 
-        self.worker = None
+    log_text = ft.Text(value="等待开始...", selectable=True, expand=True, size=12)
 
-    def append_log(self, msg: str):
-        """Slot invoked from QtLogHandler to append a line to the log widget."""
-        self.log_edit.append(msg)
-        self.log_edit.verticalScrollBar().setValue(self.log_edit.verticalScrollBar().maximum())
+    logger = logging.getLogger()
+    for h in list(logger.handlers):
+        if isinstance(h, (logging.StreamHandler, logging.FileHandler)):
+            logger.removeHandler(h)
+    logger.addHandler(FletLogHandler(log_text))
+    logger.setLevel(logging.INFO)
 
-    def select_save_path(self):
-        directory = QFileDialog.getExistingDirectory(self, '选择保存目录', self.save_path_edit.text() or str(Path.home()))
-        if directory:
-            self.save_path_edit.setText(directory)
+    def _start(e):
+        start_btn.disabled = True
+        start_btn.update()
+
+        apply_gui_config(
+            target_tf, workers_tf, r18_dropdown, filter_dropdown,
+            api_dropdown, save_tf, min_w_tf, min_h_tf,
+        )
+
+        log_text.value = "🚀 任务开始...\n"
+        log_text.update()
+
+        def worker():
             try:
-                os.makedirs(directory, exist_ok=True)
-            except Exception as e:
-                logging.warning(f'创建保存目录失败: {e}')
+                exit_code = main.main()
+            except Exception as ex:
+                logger.exception(f"下载任务异常：{ex}")
+                exit_code = 1
 
-    def apply_gui_config(self):
-        main.CONFIG['TARGET_COUNT'] = self.target_spin.value()
-        main.CONFIG['MAX_WORKERS'] = self.workers_spin.value()
-        main.CONFIG['R18'] = self.r18_check.isChecked()
-        main.CONFIG['FILTER_RESOLUTION'] = self.filter_check.isChecked()
-        main.CONFIG['MIN_WIDTH'] = self.min_w_spin.value()
-        main.CONFIG['MIN_HEIGHT'] = self.min_h_spin.value()
-        main.CONFIG['SAVE_DIR'] = self.save_path_edit.text()
-        main.CONFIG['API_SOURCE'] = self.api_combo.currentText()
+            if exit_code == 0:
+                logger.info(f"✅ 完成: 下载成功 {main.CONFIG.get('TARGET_COUNT', 0)} 张")
+            else:
+                logger.warning(f"⚠️ 未完成")
 
-    def start_download(self):
-        self.start_btn.setEnabled(False)
-        self.apply_gui_config()
-        self.log_edit.clear()
-        self.worker = Worker()
-        self.worker.finished.connect(self.on_finished)
-        self.worker.start()
+            start_btn.disabled = False
+            start_btn.update()
 
-    def on_finished(self, exit_code: int):
-        if exit_code == 0:
-            QMessageBox.information(self, '完成', f'下载完成，成功数量: {main.CONFIG.get("TARGET_COUNT", 0)}')
-        else:
-            QMessageBox.warning(self, '未完成', f'未达到目标，已下载 {main.CONFIG.get("TARGET_COUNT", 0)} 张')
-        self.start_btn.setEnabled(True)
-        self.worker = None
+        threading.Thread(target=worker, daemon=True).start()
 
-def main_gui():
-    app = QApplication(sys.argv)
-    win = MainWindow()
-    win.show()
-    sys.exit(app.exec())
+    start_btn = ft.FilledButton(
+        text="开始下载",
+        icon=ft.Icons.DOWNLOAD,
+        on_click=_start
+    )
 
-if __name__ == '__main__':
-    main_gui()
+    # ✅ 修复：使用 GREY_200 替代不存在的 SURFACE_VARIANT
+    page.add(
+        ft.Text("🎨 ACG Photo Downloader", size=24, weight=ft.FontWeight.BOLD),
+        ft.Divider(),
+        ft.Row([target_tf, workers_tf, r18_dropdown, filter_dropdown], spacing=10),
+        ft.Row([api_dropdown]),
+        ft.Row([save_tf, folder_btn], spacing=10),
+        ft.Row([min_w_tf, min_h_tf], spacing=10),
+        ft.Divider(),
+        ft.Text("📋 日志输出", weight=ft.FontWeight.BOLD),
+        ft.Container(
+            content=log_text,
+            expand=True,
+            padding=10,
+            bgcolor=ft.Colors.GREY_200,  # ✅ 修复
+            border_radius=5,
+            border=ft.border.all(1, ft.Colors.GREY_400)  # ✅ 修复
+        ),
+        ft.Row([start_btn], alignment=ft.MainAxisAlignment.CENTER),
+    )
+
+# ✅ 修复：__name__ == "__main__"
+if __name__ == "__main__":
+    ft.app(target=main_gui)  # ✅ 使用 ft.app
