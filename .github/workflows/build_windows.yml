@@ -28,7 +28,7 @@ jobs:
 
       - name: Build exe
         run: |
-          pyinstaller --onefile -w --name=ACG_Photo_Get-windows-x86_64 gui.py
+          pyinstaller --onefile -w --hidden-import=requests --name=ACG_Photo_Get-windows-x86_64 gui.py
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
